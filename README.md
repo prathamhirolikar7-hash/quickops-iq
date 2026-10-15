@@ -1,32 +1,145 @@
-# React + TypeScript + Vite
+# QuickOps IQ ⚡
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+**A live operations dashboard for a quick-commerce (10-minute grocery delivery) business in India.**
 
-Currently, two official plugins are available:
+QuickOps IQ shows how a business like a 10-minute grocery app keeps track of its orders,
+sales, deliveries and stock, all in one place, updating live as things happen.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+> **Built with Claude.** This project was designed and built step by step with
+> [Claude](https://claude.ai) (Anthropic's AI assistant) in Claude Code: the database,
+> security rules, test data, analytics, dashboard and tests.
+>
+> **All data is made up.** The company, stores, riders, products and all 20,000 orders are
+> *synthetic* (computer-generated for practice). Only the city names are real.
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## What can it do?
 
-## Expanding the Oxlint configuration
+| Feature | In simple words |
+|---|---|
+| **Executive Overview** | One screen with the most important numbers: total orders, sales (GMV), average order value, average delivery time, on-time delivery % and cancellation %, each compared with the period before. |
+| **Charts** | Orders per day, sales by city or store, busiest hours of the day, and how long deliveries take. |
+| **Top stores table** | Which dark stores sell the most and deliver the fastest. |
+| **Filters** | Pick a city, a store and a date range (today, last 7 days, last 30 days, month to date). All dates use Indian time (IST). |
+| **Orders page** | Search, filter, sort and page through every order and see its live status. |
+| **Live updates** | When orders change, the dashboard refreshes by itself. A small badge shows **Live** in the header. |
+| **Order simulator** | For operators only: create pretend orders that move through real steps (placed → picking → packed → out for delivery → delivered) so you can watch the dashboard change in real time. One click removes all pretend orders again. |
+| **Sign-in and access control** | Only approved people can see any data. Signing up alone gives you nothing. |
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+---
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+## How it is built (the simple version)
+
+```
+  Browser (React dashboard)
+        │  signs in with Supabase Auth
+        │  asks for numbers using safe database functions
+        ▼
+  Supabase (PostgreSQL database)
+        • the business tables (orders, stores, products, stock, riders, refunds …)
+        • security rules: only approved members can read; nobody can change data from the browser
+        • analytics functions: all the maths happens in the database, not in the browser
+        • live signals: a tiny "something changed" message tells dashboards to refresh
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+**Tools used**
+
+- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, shadcn/ui, Recharts (charts), TanStack Query (loading and caching), Lucide icons
+- **Backend:** Supabase (PostgreSQL 17, Auth, Realtime)
+- **Testing:** Node's built-in test runner, plus SQL tests that also run on a local in-memory PostgreSQL (PGlite)
+
+---
+
+## Security, in plain words
+
+- **Approved members only.** There is an allowlist. A new account sees *nothing* until an administrator approves it.
+- **Read-only for viewers.** Normal dashboard users can only *look*; they cannot add, change or delete anything.
+- **Operators** can run the order simulator. Even then, the database checks their role on every request and only allows the simulator's specific, limited actions.
+- **Row Level Security** is switched on for every business table, and permissions were checked table by table.
+- **No secret keys in the browser.** The app only uses Supabase's *publishable* key and refuses to start if a secret key is configured.
+- **Live updates leak nothing.** The "something changed" message carries no business data; the dashboard re-reads the numbers through the same secure functions.
+- **Secrets stay out of Git.** All `.env` files are ignored except `.env.example`, which only has placeholders.
+
+---
+
+## The data
+
+- **20,000 orders** over 90 days (16 July to 13 October 2026, Indian time)
+- **5 cities:** Bengaluru, Mumbai, Delhi NCR, Hyderabad, Pune
+- **16 live dark stores** (plus 1 planned store), **112 products** in 12 categories, **113 riders**
+- About **590,000 rows** in total, including order items, stock movements, status history, delivery timelines and refunds
+- Realistic patterns: breakfast and evening rush hours, busier weekends, festival days, monsoon rain that slows riders, stock running out, cancellations and refunds
+- Generated by a script with a fixed seed, so it produces exactly the same data every time
+- **27 data-quality checks** confirm that totals add up, refunds never exceed what was paid, stock levels match their history, and every order follows valid steps
+
+---
+
+## Run it on your computer
+
+**You need:** Node.js 22.18 or newer (built and tested on Node 24 LTS), and a Supabase project.
+
+1. **Install the packages**
+   ```bash
+   npm install
+   ```
+2. **Set up the database:** in the Supabase SQL Editor, run the files in `supabase/migrations/` **in order** (001 → 005).
+3. **Add some data** (optional): see [`supabase/seed/README.md`](supabase/seed/README.md) to load the 20,000 practice orders.
+4. **Connect the app:** copy `.env.example` to `.env.local` and fill in your project URL and **publishable** key (never the secret key).
+5. **Approve yourself:** create a user in Supabase **Authentication → Users**, then add it to the allowlist:
+   ```sql
+   insert into private.dashboard_members (user_id, approved_by, role)
+   select id, 'owner', 'viewer' from auth.users where email = 'you@example.com';
+   ```
+   Use `'operator'` instead of `'viewer'` if you also want the simulator.
+6. **Start the dashboard**
+   ```bash
+   npm run dev
+   ```
+   Then open http://localhost:5173 and sign in.
+
+---
+
+## Tests
+
+| Command | What it checks |
+|---|---|
+| `npm run test:unit` | Dates, filters, number formatting, the live-update and simulator controllers (44 tests) |
+| `npm run test:db` | Security: who can and cannot read or write (99 checks) |
+| `npm run test:analytics` | That every dashboard number matches the raw data (86 checks) |
+| `npm run test:realtime` | That live signals work and leak nothing (21 checks) |
+| `npm run test:simulator` | The order simulator, its limits and its clean reset (27 checks) |
+| `npm run build` / `npm run lint` | The app compiles and the code is tidy |
+
+The database tests run on a local in-memory copy of PostgreSQL, so they never touch your real data.
+The same `.test.sql` files in `supabase/tests/` can also be run in the Supabase SQL Editor; everything they create is rolled back.
+
+---
+
+## Folder guide
+
+```
+src/                  the React dashboard (pages, charts, sign-in, live updates)
+supabase/migrations/  the database, in five steps:
+                        001 tables · 002 security · 003 analytics · 004 live signals · 005 simulator
+supabase/tests/       SQL tests (plus local runners in supabase/tests/local)
+supabase/seed/        data-quality checks, summary queries and the seeding guide
+scripts/seed/         the generator for the 20,000 practice orders
+docs/                 the KPI dictionary (how every number is calculated)
+```
+
+Every dashboard number is explained in plain terms in [`docs/kpi-dictionary.md`](docs/kpi-dictionary.md).
+
+---
+
+## Good to know
+
+- The data ends on 13 October 2026, so the date filters start from the latest day that has data.
+- Live updates refresh the screen at most once every 15 seconds, to avoid overloading the database.
+- The simulator runs from an open browser tab and stops by itself after 30 minutes.
+
+---
+
+## Credits
+
+Created by **prathamhirolikar7-hash** as a Business Analyst portfolio project, **built together with Claude** (Anthropic's AI assistant) using Claude Code.
